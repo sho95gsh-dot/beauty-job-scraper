@@ -84,36 +84,80 @@ def save_to_spreadsheet(salons):
 
     existing_names = sheet.col_values(2)
     
+    # 既存の行数（次に追加する行の開始位置を把握するため）
+    start_row = len(sheet.get_all_values()) + 1
+    
     add_count = 0
     rows_to_add = []
+    links_to_format = []
     
     for salon in salons:
         name = salon["施設名"]
         if name not in existing_names and name != "" and name != "nan":
             
-            # ★追加機能：Google検索用のリンクを作成★
-            # 検索キーワードを「店舗名 姫路」にして精度を上げる
+            # Google検索リンクのURLを作成
             search_query = f"{name} 姫路"
-            # URLで使える文字に変換
             encoded_query = urllib.parse.quote(search_query)
-            # スプレッドシートのHYPERLINK関数を組み立てる
-            google_link = f'=HYPERLINK("https://www.google.com/search?q={encoded_query}", "🔍Google検索")'
+            google_url = f"https://www.google.com/search?q={encoded_query}"
 
+            # A〜E列のテキストデータを準備（E列はとりあえず文字だけ入れる）
             rows_to_add.append([
                 salon["開設日"],    # A列
                 name,             # B列
                 salon["所在地"],    # C列
                 salon["電話番号"],   # D列
-                google_link       # E列：Google検索リンク
+                "🔍Google検索"      # E列のテキスト
             ])
+            
+            # E列に設定するリンク情報を保存しておく
+            current_row = start_row + add_count
+            links_to_format.append({
+                "range": f"E{current_row}",
+                "url": google_url
+            })
+            
             print(f"新規追加準備: {name} ({salon['開設日']})")
             add_count += 1
             existing_names.append(name)
 
     if rows_to_add:
         try:
-            # ★ value_input_option="USER_ENTERED" を指定することで、関数（=HYPERLINK）が数式として正しく認識・反映されます
-            sheet.append_rows(rows_to_add, value_input_option="USER_ENTERED")
+            # 1. まずテキストデータを一括で書き込む（関数を使わない）
+            sheet.append_rows(rows_to_add, value_input_option="RAW")
+            
+            # 2. 追加した行のE列に「ハイパーリンク書式」を一括で設定する
+            requests = []
+            for link_data in links_to_format:
+                # セル範囲をオブジェクトに変換
+                cell_range = gspread.utils.a1_range_to_grid_range(link_data["range"], sheet.id)
+                # ハイパーリンクを設定するリクエストを作成
+                requests.append({
+                    "updateCells": {
+                        "range": cell_range,
+                        "rows": [
+                            {
+                                "values": [
+                                    {
+                                        "userEnteredValue": {"stringValue": "🔍Google検索"},
+                                        "userEnteredFormat": {
+                                            "textFormat": {
+                                                "link": {"uri": link_data["url"]},
+                                                "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 1.0}, # 青色にする
+                                                "underline": True
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        "fields": "userEnteredValue,userEnteredFormat.textFormat(link,foregroundColor,underline)"
+                    }
+                })
+            
+            # リクエストを実行してリンク書式を反映
+            if requests:
+                client.open_by_key(SPREADSHEET_KEY).batch_update({"requests": requests})
+                
             print(f"完了: {add_count}件をシートに書き込みました。")
         except Exception as e:
             print(f"書き込み中にエラーが発生しました: {e}")
