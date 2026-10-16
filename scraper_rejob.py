@@ -57,17 +57,48 @@ def scrape_rejob():
                     continue
                 seen_urls.add(full_url)
 
-                parent = link.evaluate_handle("el => el.closest('li') || el.closest('div')")
-                text = parent.inner_text().strip() if parent else ""
-                
-                if len(text) < 15:
-                    continue
+                # 求人カード全体（外枠）を確実に取得する
+                # 直近の小さなdivで止まらず、情報がまとまっている親要素まで遡る
+                card = link.evaluate_handle("""el => {
+                    let container = el.closest('article') || el.closest('li');
+                    if (container) return container;
+                    let cur = el;
+                    while (cur && cur.parentElement && cur.parentElement !== document.body) {
+                        cur = cur.parentElement;
+                        if (cur.tagName === 'DIV' && cur.innerText && cur.innerText.length > 80) {
+                            return cur;
+                        }
+                    }
+                    return el.parentElement;
+                }""")
 
+                # PR求人（広告枠）の検知
+                is_pr = card.evaluate("""el => {
+                    // 1. 広告枠・PR枠専用のコンテナに属しているか
+                    if (el.closest('[class*="pr-"], [class*="--pr"], [class*="is-pr"], [class*="pickup"], [class*="sponsor"]')) {
+                        return true;
+                    }
+                    // 2. カード内に単独で「PR」「ＰＲ」「PR求人」と書かれたラベルがあるか
+                    const tags = Array.from(el.querySelectorAll('span, div, p, em, strong, i, b'));
+                    return tags.some(t => {
+                        const txt = t.innerText ? t.innerText.trim() : '';
+                        return txt === 'PR' || txt === 'ＰＲ' || txt === 'PR求人';
+                    });
+                }""")
+
+                text = card.inner_text().strip() if card else ""
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-                # PR求人（広告枠）の除外判定
-                if any(line in ["PR", "PR求人"] for line in lines[:5]):
-                    print(f"PR求人をスキップしました: {full_url}")
+                # テキスト全体からも念のため判定
+                if not is_pr and any(line in ["PR", "PR求人", "ＰＲ"] for line in lines):
+                    is_pr = True
+
+                if is_pr:
+                    print(f"【PR除外】スキップしました: {full_url}")
+                    continue
+
+                # テキストが短すぎるものは除外
+                if len(text) < 15:
                     continue
 
                 title = lines[0] if len(lines) > 0 else "不明"
