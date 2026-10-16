@@ -37,7 +37,11 @@ def scrape_rejob():
 
         # クラス名に依存せず、求人詳細（/job/）へのリンクを画面全体から直接探す
         links = page.query_selector_all("a")
-        today = datetime.date.today().strftime("%Y-%m-%d")
+        
+        # 日本時間 (UTC+9時間) のタイムゾーンを設定して日付を取得する
+        JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
+        today = datetime.datetime.now(JST).strftime("%Y-%m-%d")
+        
         seen_urls = set()
 
         for link in links:
