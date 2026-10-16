@@ -26,8 +26,15 @@ def fetch_recent_himeji_salons():
         "sort": "開設日 desc"   
     }
 
+    # ★追加：一般的なブラウザ（Chrome）になりすますヘッダー
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+
     try:
-        res = requests.get(ckan_api_url, params=params)
+        # headers=headers を渡す
+        res = requests.get(ckan_api_url, params=params, headers=headers, timeout=15)
         res.raise_for_status() 
         data = res.json()
     except Exception as e:
@@ -43,7 +50,6 @@ def fetch_recent_himeji_salons():
     for row in records:
         open_date = str(row.get("開設日", ""))[:10] 
         
-        # 開設日が30日以内のものだけを抽出
         if open_date >= one_month_ago:
             recent_salons.append({
                 "開設日": open_date,
