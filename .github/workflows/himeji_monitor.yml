@@ -21,11 +21,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+          
       # 3. 必要なPythonライブラリをインストールする
       - name: Install dependencies
         run: |
-          pip install requests gspread google-auth
+          pip install requests gspread google-auth pandas openpyxl beautifulsoup4
 
       # 4. スプレッドシートへの書き込み権限（認証キー）を準備する
       # ※ すでに設定済みの「GCP_SA_KEY」を使用します。
