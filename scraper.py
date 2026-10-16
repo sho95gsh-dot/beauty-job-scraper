@@ -14,12 +14,14 @@ def setup_gspread():
     creds_dict = json.loads(creds_json)
 
     client = gspread.service_account_from_dict(creds_dict)
-    sheet = client.open("リジョブ新店リスト").sheet1
+    
+    # スプレッドシート名「AI探客プログラム」を開く
+    spreadsheet = client.open("AI探客プログラム")
+    sheet = spreadsheet.worksheet("リジョブ") 
     return sheet
 
 def scrape_rejob():
     new_jobs = []
-    # 現在設定されているURL
     target_url = "https://relax-job.com/search?business_type=biyoshi.riyoshi&city=28201.28210.28216.28229.28381.28382.28464&employment=arbeit.business-consignment.contract-employee.other.regular-member&facility_type=barber-shop.hair-salon.haircolor-shop.haircut-shop.spa&pref=28&sort=new"
 
     with sync_playwright() as p:
@@ -35,10 +37,9 @@ def scrape_rejob():
         print("ページの読み込みを10秒待機しています...")
         page.wait_for_timeout(10000)
 
-        # クラス名に依存せず、求人詳細（/job/）へのリンクを画面全体から直接探す
         links = page.query_selector_all("a")
         
-        # 日本時間 (UTC+9時間) のタイムゾーンを設定して日付を取得する
+        # 日本時間 (UTC+9) で日付取得
         JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
         today = datetime.datetime.now(JST).strftime("%Y-%m-%d")
         
@@ -47,27 +48,28 @@ def scrape_rejob():
         for link in links:
             try:
                 href = link.get_attribute("href")
-                # hrefがない、または求人ページへのリンクじゃない場合はスキップ
                 if not href or "/job/" not in href:
                     continue
 
                 full_url = f"https://relax-job.com{href}" if href.startswith("/") else href
                 
-                # 重複カウントを防止
                 if full_url in seen_urls:
                     continue
                 seen_urls.add(full_url)
 
-                # リンクを含む一番近い「枠（li または div）」を探す
                 parent = link.evaluate_handle("el => el.closest('li') || el.closest('div')")
                 text = parent.inner_text().strip() if parent else ""
                 
-                # テキストが短すぎるものはヘッダー等の関係ないリンクなので無視
                 if len(text) < 15:
                     continue
 
-                # まとまったテキストから最初の2行を抽出して「タイトル・会社名」の代わりにする
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
+
+                # PR求人（広告枠）の除外判定
+                if any(line in ["PR", "PR求人"] for line in lines[:5]):
+                    print(f"PR求人をスキップしました: {full_url}")
+                    continue
+
                 title = lines[0] if len(lines) > 0 else "不明"
                 company = lines[1] if len(lines) > 1 else "不明"
 
@@ -76,7 +78,7 @@ def scrape_rejob():
             except Exception as e:
                 continue
 
-        print(f"画面から {len(new_jobs)} 件の求人リンクを発見しました。")
+        print(f"画面から {len(new_jobs)} 件の求人リンク（PR除外済）を発見しました。")
         browser.close()
 
     return new_jobs
