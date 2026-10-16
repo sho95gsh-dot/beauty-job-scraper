@@ -1,42 +1,37 @@
-name: Himeji Health Center Monitor
+name: Himeji Excel Importer
 
-# 実行のタイミング設定
+# 実行タイミング：手動実行のみ
 on:
-  schedule:
-    # 毎日 UTC 23:00（日本時間の朝8:00）に自動実行
-    - cron: '0 23 * * *'
-  workflow_dispatch: # GitHub上の画面から「Run workflow」ボタンで手動実行するための設定
+  workflow_dispatch: 
 
 jobs:
-  run-himeji-monitor:
+  run-himeji-importer:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. リポジトリのコード（Pythonファイルなど）を読み込む
+      # 1. リポジトリのファイル一式（himeji.xlsx 含む）を読み込む
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Python環境をセットアップする
+      # 2. Pythonの準備
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
-      # 3. 必要なPythonライブラリをインストールする
+
+      # 3. 必要なライブラリのインストール
       - name: Install dependencies
         run: |
-          pip install requests gspread google-auth pandas openpyxl beautifulsoup4
+          pip install pandas openpyxl gspread google-auth
 
-      # 4. スプレッドシートへの書き込み権限（認証キー）を準備する
-      # ※ すでに設定済みの「GCP_SA_KEY」を使用します。
-      # ※ もし既存のymlファイルでキーの名前が異なる場合（例: GOOGLE_CREDENTIALS 等）は、ここを書き換えてください。
+      # 4. GCPキーの生成（スプレッドシート書き込み権限）
       - name: Create credentials file
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           echo "$GCP_SA_KEY" > service_account.json
 
-      # 5. 姫路市のPythonスクリプトを実行する
-      - name: Run Scraping Script
+      # 5. インポートスクリプトの実行
+      - name: Run Import Script
         run: |
           python himeji_monitor.py
